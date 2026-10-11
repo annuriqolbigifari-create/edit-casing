@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Image Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        #canvas-container {
+            max-width: 100%;
+            overflow: hidden; /* Mengubah auto menjadi hidden agar scroll tidak pernah muncul */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: repeating-linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%, #e5e7eb), repeating-linear-gradient(45deg, #e5e7eb 25%, #f9fafb 25%, #f9fafb 75%, #e5e7eb 75%, #e5e7eb);
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+            border-radius: 0.5rem;
+            touch-action: none; /* Mencegah browser scroll saat menyentuh canvas di HP */
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%; /* Memastikan tinggi kanvas tidak melebihi kontainer */
+            width: auto;
+            height: auto;
+            object-fit: contain; /* Menjaga rasio gambar tetap proporsional */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        .tool-active {
+            background-color: #3b82f6 !important;
+            color: white !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 flex flex-col">
+
+    <header class="bg-white shadow-sm p-4 sticky top-0 z-10">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600 flex items-center gap-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> EditGambarKu
+            </h1>
+            <div class="flex gap-2">
+                <button id="undo-btn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled title="Undo (Ctrl+Z)">
+                    <i class="fa-solid fa-arrow-rotate-left"></i>
+                </button>
+                <button id="redo-btn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled title="Redo (Ctrl+Y)">
+                    <i class="fa-solid fa-arrow-rotate-right"></i>
+                </button>
+                <label for="upload-image" class="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-upload"></i> Unggah
+                </label>
+                <input type="file" id="upload-image" accept="image/*" class="hidden">
+                <button id="download-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <i class="fa-solid fa-download"></i> Simpan
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-6xl mx-auto w-full p-4 flex flex-col md:flex-row gap-6 items-start mt-4">
+        
+        <aside class="w-full md:w-80 bg-white rounded-xl shadow-md p-5 flex flex-col gap-6 flex-shrink-0">
+            
+            <div>
+                <h3 class="text-lg font-semibold border-b pb-2 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders"></i> Filter Dasar
+                </h3>
+                
+                <div class="space-y-4">
+                    <div class="filter-control">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Kecerahan (Brightness)</label>
+                            <span id="brightness-val" class="text-sm text-gray-500">100%</span>
+                        </div>
+                        <input type="range" id="brightness" min="0" max="200" value="100" class="w-full">
+                    </div>
+
+                    <div class="filter-control">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Kontras (Contrast)</label>
+                            <span id="contrast-val" class="text-sm text-gray-500">100%</span>
+                        </div>
+                        <input type="range" id="contrast" min="0" max="200" value="100" class="w-full">
+                    </div>
+
+                    <div class="filter-control">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Saturasi (Saturation)</label>
+                            <span id="saturation-val" class="text-sm text-gray-500">100%</span>
+                        </div>
+                        <input type="range" id="saturation" min="0" max="200" value="100" class="w-full">
+                    </div>
+                    
+                    <div class="filter-control">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Buram (Blur)</label>
+                            <span id="blur-val" class="text-sm text-gray-500">0px</span>
+                        </div>
+                        <input type="range" id="blur" min="0" max="20" value="0" class="w-full">
+                    </div>
+                    
+                     <div class="filter-control">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium">Sepia</label>
+                            <span id="sepia-val" class="text-sm text-gray-500">0%</span>
+                        </div>
+                        <input type="range" id="sepia" min="0" max="100" value="0" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-semibold border-b pb-2 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-rotate"></i> Transformasi
+                </h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="rotate-left" class="bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate-left"></i> Kiri
+                    </button>
+                    <button id="rotate-right" class="bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i> Kanan
+                    </button>
+                    <button id="flip-horizontal" class="bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-arrows-left-right"></i> H-Flip
+                    </button>
+                    <button id="flip-vertical" class="bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-arrows-up-down"></i> V-Flip
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-semibold border-b pb-2 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-shapes"></i> Tambah Bentuk
+                </h3>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-4 gap-2">
+                        <button id="tool-none" class="tool-btn tool-active bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center" title="Pilih (Tidak Menggambar)">
+                            <i class="fa-solid fa-hand-pointer"></i>
+                        </button>
+                        <button id="tool-rect" class="tool-btn bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center" title="Kotak">
+                            <i class="fa-regular fa-square"></i>
+                        </button>
+                        <button id="tool-circle" class="tool-btn bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center" title="Bulat">
+                            <i class="fa-regular fa-circle"></i>
+                        </button>
+                        <button id="tool-crop" class="tool-btn bg-gray-100 hover:bg-gray-200 py-2 rounded-lg text-gray-700 transition flex items-center justify-center" title="Potong (Crop)">
+                            <i class="fa-solid fa-crop-simple"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <label for="shape-color" class="text-sm font-medium">Warna:</label>
+                        <input type="color" id="shape-color" value="#ff0000" class="h-8 w-full cursor-pointer rounded border-gray-300">
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <label for="shape-fill" class="text-sm font-medium">Isi (Fill):</label>
+                        <input type="checkbox" id="shape-fill" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                    </div>
+                    
+                    <div class="flex items-center gap-2 opacity-40 transition-opacity" id="rect-radius-container">
+                        <label for="shape-radius" class="text-sm font-medium">Lengkung:</label>
+                        <input type="range" id="shape-radius" min="0" max="150" value="0" class="w-full" disabled>
+                        <span id="radius-val" class="text-sm text-gray-500 w-10 text-right">0px</span>
+                    </div>
+
+                    <button id="apply-crop-btn" class="w-full bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-1.5 px-4 rounded-lg transition-colors text-sm mt-2 hidden">
+                        <i class="fa-solid fa-check"></i> Terapkan Potongan
+                    </button>
+
+                    <div class="border-t pt-3 mt-2">
+                        <h4 class="text-sm font-medium text-gray-600 mb-2">Kontrol Layer & Potong</h4>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <button id="layer-up-btn" class="bg-gray-100 hover:bg-gray-200 py-1.5 rounded-lg text-gray-700 text-sm transition flex items-center justify-center gap-1" title="Naikkan Layer">
+                                <i class="fa-solid fa-arrow-up"></i> Naik
+                            </button>
+                            <button id="layer-down-btn" class="bg-gray-100 hover:bg-gray-200 py-1.5 rounded-lg text-gray-700 text-sm transition flex items-center justify-center gap-1" title="Turunkan Layer">
+                                <i class="fa-solid fa-arrow-down"></i> Turun
+                            </button>
+                        </div>
+                        <button id="cut-hole-btn" class="w-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-1.5 px-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-object-subtract"></i> Gabung & Lubangi
+                        </button>
+                        <button id="crop-with-shape-btn" class="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold py-1.5 px-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 mt-2 hidden">
+                            <i class="fa-solid fa-eraser"></i> Hapus Area Sesuai Bentuk
+                        </button>
+                    </div>
+                    
+                    <button id="clear-shapes-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1.5 px-4 rounded-lg transition-colors text-sm mt-2">
+                        Hapus Semua Bentuk
+                    </button>
+                </div>
+            </div>
+
+            <button id="reset-btn" class="mt-auto w-full bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-2 px-4 rounded-lg transition-colors flex justify-center items-center gap-2">
+                <i class="fa-solid fa-rotate-right"></i> Reset Semua
+            </button>
+        </aside>
+
+        <div class="flex-grow bg-white rounded-xl shadow-md p-4 flex flex-col min-h-[500px]">
+            <div id="canvas-container" class="flex-grow w-full h-full relative cursor-crosshair">
+                <!-- Placeholder text before image is loaded -->
+                <div id="placeholder-text" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
+                    <i class="fa-regular fa-image text-6xl mb-4 text-gray-300"></i>
+                    <p>Mulai dengan mengunggah gambar</p>
+                </div>
+                <!-- Interactive canvas -->
+                <canvas id="image-canvas" class="hidden"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Elements
+            const uploadInput = document.getElementById('upload-image');
+            const canvas = document.getElementById('image-canvas');
+            const ctx = canvas.getContext('2d');
+            const downloadBtn = document.getElementById('download-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const placeholderText = document.getElementById('placeholder-text');
+
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+
+            // Filters
+            const brightnessInput = document.getElementById('brightness');
+            const contrastInput = document.getElementById('contrast');
+            const saturationInput = document.getElementById('saturation');
+            const blurInput = document.getElementById('blur');
+            const sepiaInput = document.getElementById('sepia');
+            
+            // Value Labels
+            const brightnessVal = document.getElementById('brightness-val');
+            const contrastVal = document.getElementById('contrast-val');
+            const saturationVal = document.getElementById('saturation-val');
+            const blurVal = document.getElementById('blur-val');
+            const sepiaVal = document.getElementById('sepia-val');
+
+            // Transform Buttons
+            const rotateLeftBtn = document.getElementById('rotate-left');
+            const rotateRightBtn = document.getElementById('rotate-right');
+            const flipHorizontalBtn = document.getElementById('flip-horizontal');
+            const flipVerticalBtn = document.getElementById('flip-vertical');
+
+            // Shape Tools Elements
+            const toolBtns = document.querySelectorAll('.tool-btn');
+            const toolNoneBtn = document.getElementById('tool-none');
+            const toolRectBtn = document.getElementById('tool-rect');
+            const toolCircleBtn = document.getElementById('tool-circle');
+            const toolCropBtn = document.getElementById('tool-crop');
+            const shapeColorInput = document.getElementById('shape-color');
+            const shapeFillInput = document.getElementById('shape-fill');
+            const shapeRadiusInput = document.getElementById('shape-radius');
+            const radiusVal = document.getElementById('radius-val');
+            const clearShapesBtn = document.getElementById('clear-shapes-btn');
+            const applyCropBtn = document.getElementById('apply-crop-btn');
+            
+            // Layer & Cut Elements
+            const layerUpBtn = document.getElementById('layer-up-btn');
+            const layerDownBtn = document.getElementById('layer-down-btn');
+            const cutHoleBtn = document.getElementById('cut-hole-btn');
+            const cropWithShapeBtn = document.getElementById('crop-with-shape-btn');
+
+            // State
+            let originalImage = null;
+            let currentRotation = 0;
+            let flipH = 1;
+            let flipV = 1;
+            let cropBox = null;
+            
+            // Drawing State
+            let currentTool = 'none'; // 'none', 'rect', 'circle'
+            let isDrawing = false;
+            let startX, startY;
+            let shapes = []; // Store drawn shapes
+            
+            // Selection, Dragging & Resizing State
+            let selectedShapeIndex = -1;
+            let isDraggingShape = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+            
+            let isResizingShape = false;
+            let resizeHandleType = null;
+            let originalShapeState = null;
+
+            // Crop state
+            let isResizingCrop = false;
+            let isDraggingCrop = false;
+            let cropResizeHandle = null;
+            let originalCropState = null;
+
+            // History State
+            let history = [];
+            let historyIndex = -1;
+            let isRestoring = false;
+
+            function updateUndoRedoUI() {
+                undoBtn.disabled = historyIndex <= 0;
+                redoBtn.disabled = historyIndex >= history.length - 1;
+            }
+
+            function saveState() {
+                if (!originalImage || isRestoring) return;
+                
+                // Jika sedang berada di tengah riwayat dan membuat perubahan baru, hapus riwayat ke depan (redo)
+                if (historyIndex < history.length - 1) {
+                    history = history.slice(0, historyIndex + 1);
+                }
+
+                const state = {
+                    imageSrc: originalImage.src,
+                    filters: {
+                        brightness: brightnessInput.value,
+                        contrast: contrastInput.value,
+                        saturation: saturationInput.value,
+                        blur: blurInput.value,
+                        sepia: sepiaInput.value
+                    },
+                    transforms: {
+                        rotation: currentRotation,
+                        flipH: flipH,
+                        flipV: flipV
+                    },
+                    shapes: JSON.parse(JSON.stringify(shapes)) // Deep copy
+                };
+
+                history.push(state);
+                // Batasi riwayat maksimal 30 langkah agar tidak membebani memori browser
+                if (history.length > 30) {
+                    history.shift();
+                } else {
+                    historyIndex++;
+                }
+                updateUndoRedoUI();
+            }
+
+            function restoreState(index) {
+                if (index < 0 || index >= history.length) return;
+                isRestoring = true;
+                const state = history[index];
+                
+                shapes = JSON.parse(JSON.stringify(state.shapes));
+                selectedShapeIndex = -1; // Reset seleksi saat undo/redo
+                
+                brightnessInput.value = state.filters.brightness;
+                contrastInput.value = state.filters.contrast;
+                saturationInput.value = state.filters.saturation;
+                blurInput.value = state.filters.blur;
+                sepiaInput.value = state.filters.sepia;
+                
+                currentRotation = state.transforms.rotation;
+                flipH = state.transforms.flipH;
+                flipV = state.transforms.flipV;
+
+                // Jika gambar utama telah berubah (misal karena crop/hapus), muat ulang gambar
+                if (originalImage.src !== state.imageSrc) {
+                    const img = new Image();
+                    img.onload = () => {
+                        originalImage = img;
+                        applyFilters();
+                        isRestoring = false;
+                    };
+                    img.src = state.imageSrc;
+                } else {
+                    applyFilters();
+                    isRestoring = false;
+                }
+                
+                if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+                historyIndex = index;
+                updateUndoRedoUI();
+            }
+
+            undoBtn.addEventListener('click', () => {
+                if (historyIndex > 0) restoreState(historyIndex - 1);
+            });
+
+            redoBtn.addEventListener('click', () => {
+                if (historyIndex < history.length - 1) restoreState(historyIndex + 1);
+            });
+
+            // Shortcuts keyboard Undo / Redo
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    if (e.key === 'z' || e.key === 'Z') {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            if (historyIndex < history.length - 1) restoreState(historyIndex + 1);
+                        } else {
+                            if (historyIndex > 0) restoreState(historyIndex - 1);
+                        }
+                    } else if (e.key === 'y' || e.key === 'Y') {
+                        e.preventDefault();
+                        if (historyIndex < history.length - 1) restoreState(historyIndex + 1);
+                    }
+                }
+            });
+
+            uploadInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        originalImage = img;
+                        
+                        // Show canvas, hide placeholder, enable download
+                        canvas.classList.remove('hidden');
+                        placeholderText.classList.add('hidden');
+                        downloadBtn.disabled = false;
+
+                        history = [];
+                        historyIndex = -1;
+
+                        resetSettings();
+                        shapes = []; // Clear shapes on new image load
+                        selectedShapeIndex = -1;
+                        applyFilters(); // Initial draw
+                        saveState(); // Simpan state awal gambar
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+
+            function applyFilters() {
+                if (!originalImage) return;
+
+                // Update label values
+                brightnessVal.textContent = `${brightnessInput.value}%`;
+                contrastVal.textContent = `${contrastInput.value}%`;
+                saturationVal.textContent = `${saturationInput.value}%`;
+                blurVal.textContent = `${blurInput.value}px`;
+                sepiaVal.textContent = `${sepiaInput.value}%`;
+
+                // Calculate Canvas size based on rotation
+                if (currentRotation === 90 || currentRotation === 270) {
+                    canvas.width = originalImage.height;
+                    canvas.height = originalImage.width;
+                } else {
+                    canvas.width = originalImage.width;
+                    canvas.height = originalImage.height;
+                }
+                
+                // Clear canvas before redrawing
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Save context before applying image-specific transformations
+                ctx.save();
+
+                // Apply CSS Filters to context
+                ctx.filter = `
+                    brightness(${brightnessInput.value}%) 
+                    contrast(${contrastInput.value}%) 
+                    saturate(${saturationInput.value}%)
+                    blur(${blurInput.value}px)
+                    sepia(${sepiaInput.value}%)
+                `;
+
+                // Move to center to rotate/flip
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+
+                // Rotate
+                ctx.rotate((currentRotation * Math.PI) / 180);
+
+                // Flip
+                ctx.scale(flipH, flipV);
+
+                // Draw image centered
+                ctx.drawImage(
+                    originalImage, 
+                    -originalImage.width / 2, 
+                    -originalImage.height / 2, 
+                    originalImage.width, 
+                    originalImage.height
+                );
+                
+                // Restore context to remove filters and transforms before drawing shapes
+                ctx.restore();
+                
+                // Draw all stored shapes on top
+                drawShapes();
+
+                // Draw crop overlay if active
+                drawCropOverlay();
+            }
+            
+            function drawCropOverlay() {
+                if (currentTool !== 'crop' || !cropBox) return;
+                const r = getNormalRect(cropBox);
+                if (r.w === 0 || r.h === 0) return;
+
+                const radius = Math.min(parseInt(shapeRadiusInput.value) || 0, r.w/2, r.h/2);
+
+                ctx.save();
+                // Buat area luar kotak menjadi gelap (overlay hitam semi-transparan)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.beginPath();
+                ctx.rect(0, 0, canvas.width, canvas.height); // Outer rect
+                if (ctx.roundRect) {
+                    ctx.roundRect(r.x, r.y, r.w, r.h, radius);
+                } else {
+                    ctx.rect(r.x, r.y, r.w, r.h); // Inner rect fallback
+                }
+                ctx.fill('evenodd'); // Metode evenodd membuat lubang pada kotak dalam
+
+                // Gambar garis putus-putus pembatas kotak potong dengan lengkungan
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(r.x, r.y, r.w, r.h, radius);
+                } else {
+                    ctx.rect(r.x, r.y, r.w, r.h);
+                }
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                
+                // Garis bayangan untuk kontras visual di atas gambar terang
+                ctx.strokeStyle = '#000000';
+                ctx.lineDashOffset = 5;
+                ctx.stroke();
+                
+                // Draw crop handles
+                ctx.setLineDash([]); 
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#2563eb';
+                const handles = getHandles({type: 'rect', x: r.x, y: r.y, w: r.w, h: r.h});
+                handles.forEach(h => {
+                    ctx.fillRect(h.x, h.y, h.w, h.h);
+                    ctx.strokeRect(h.x, h.y, h.w, h.h);
+                });
+                
+                ctx.restore();
+            }
+
+            // Helper function to normalize rect dimensions (handle negative width/height)
+            function getNormalRect(shape) {
+                return {
+                    x: shape.w < 0 ? shape.x + shape.w : shape.x,
+                    y: shape.h < 0 ? shape.y + shape.h : shape.y,
+                    w: Math.abs(shape.w),
+                    h: Math.abs(shape.h)
+                };
+            }
+
+            // Memperbaiki / menormalkan nilai width & height menjadi positif secara permanen
+            function normalizeShape(shape) {
+                if (shape.type === 'rect') {
+                    const r = getNormalRect(shape);
+                    shape.x = r.x;
+                    shape.y = r.y;
+                    shape.w = r.w;
+                    shape.h = r.h;
+                }
+            }
+
+            // Mendapatkan 8 titik (handle) pembesaran untuk kotak
+            function getHandles(shape) {
+                if (shape.type !== 'rect') return [];
+                const r = getNormalRect(shape);
+                const hs = 24; // Handle size diperbesar dari 12 menjadi 24 agar mudah ditarik dengan jari
+                const hhs = hs / 2;
+                return [
+                    { type: 'tl', x: r.x - hhs, y: r.y - hhs, w: hs, h: hs, cursor: 'nwse-resize' },
+                    { type: 't',  x: r.x + r.w/2 - hhs, y: r.y - hhs, w: hs, h: hs, cursor: 'ns-resize' },
+                    { type: 'tr', x: r.x + r.w - hhs, y: r.y - hhs, w: hs, h: hs, cursor: 'nesw-resize' },
+                    { type: 'r',  x: r.x + r.w - hhs, y: r.y + r.h/2 - hhs, w: hs, h: hs, cursor: 'ew-resize' },
+                    { type: 'br', x: r.x + r.w - hhs, y: r.y + r.h - hhs, w: hs, h: hs, cursor: 'nwse-resize' },
+                    { type: 'b',  x: r.x + r.w/2 - hhs, y: r.y + r.h - hhs, w: hs, h: hs, cursor: 'ns-resize' },
+                    { type: 'bl', x: r.x - hhs, y: r.y + r.h - hhs, w: hs, h: hs, cursor: 'nesw-resize' },
+                    { type: 'l',  x: r.x - hhs, y: r.y + r.h/2 - hhs, w: hs, h: hs, cursor: 'ew-resize' }
+                ];
+            }
+
+            // Mengecek apakah klik mengenai handle pembesaran
+            function getHandleAtPos(px, py, shape) {
+                const handles = getHandles(shape);
+                for (let h of handles) {
+                    if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) {
+                        return h;
+                    }
+                }
+                return null;
+            }
+
+            function addShapeToPath(path, shape) {
+                if (shape.type === 'rect') {
+                    const r = getNormalRect(shape);
+                    const maxRadius = Math.min(r.w / 2, r.h / 2);
+                    const currentRadius = Math.min(shape.radius || 0, maxRadius);
+                    
+                    if (path.roundRect) {
+                        path.roundRect(r.x, r.y, r.w, r.h, currentRadius);
+                    } else {
+                        path.rect(r.x, r.y, r.w, r.h);
+                    }
+                } else if (shape.type === 'circle') {
+                    const radius = Math.sqrt(Math.pow(shape.w, 2) + Math.pow(shape.h, 2)) / 2;
+                    const centerX = shape.x + shape.w / 2;
+                    const centerY = shape.y + shape.h / 2;
+                    path.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                }
+            }
+
+            function buildPathForShape(shape) {
+                const path = new Path2D();
+                addShapeToPath(path, shape);
+                
+                // Tambahkan semua lubang (holes) ke dalam path yang sama
+                // Aturan 'evenodd' nantinya akan secara otomatis membuat path yang tumpang tindih menjadi transparan
+                if (shape.holes) {
+                    shape.holes.forEach(hole => {
+                        addShapeToPath(path, hole);
+                    });
+                }
+                return path;
+            }
+
+            function getBoundingBox(shape) {
+                if (shape.type === 'rect') {
+                    return getNormalRect(shape);
+                } else if (shape.type === 'circle') {
+                    const r = Math.sqrt(Math.pow(shape.w, 2) + Math.pow(shape.h, 2)) / 2;
+                    const cx = shape.x + shape.w / 2;
+                    const cy = shape.y + shape.h / 2;
+                    return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+                }
+                return {x: 0, y: 0, w: 0, h: 0};
+            }
+            
+            // Helper for Hit Detection menggunakan Path2D agar akurat termasuk pada area bolong
+            function isPointInShape(px, py, shape) {
+                const path = buildPathForShape(shape);
+                return ctx.isPointInPath(path, px, py, 'evenodd');
+            }
+
+            function drawShapes() {
+                shapes.forEach((shape, index) => {
+                    const path = buildPathForShape(shape);
+
+                    if (shape.fill) {
+                        ctx.fillStyle = shape.color;
+                        ctx.fill(path, 'evenodd');
+                    } else {
+                        ctx.strokeStyle = shape.color;
+                        ctx.lineWidth = 3;
+                        ctx.stroke(path);
+                    }
+                    
+                    // Highlight selected shape & show resize handles
+                    if (index === selectedShapeIndex) {
+                        ctx.save();
+                        ctx.strokeStyle = '#2563eb'; // Blue dashed outline
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([6, 6]);
+                        
+                        // Garis seleksi mengikuti batas terluar objek utama
+                        if (shape.type === 'rect') {
+                            const r = getNormalRect(shape);
+                            ctx.strokeRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+                            
+                            // Draw Resize Handles (Titik Putih)
+                            ctx.setLineDash([]); 
+                            ctx.fillStyle = '#ffffff';
+                            const handles = getHandles(shape);
+                            handles.forEach(h => {
+                                ctx.fillRect(h.x, h.y, h.w, h.h);
+                                ctx.strokeRect(h.x, h.y, h.w, h.h);
+                            });
+                        } else if (shape.type === 'circle') {
+                            const cx = shape.x + shape.w / 2;
+                            const cy = shape.y + shape.h / 2;
+                            const radius = Math.sqrt(Math.pow(shape.w, 2) + Math.pow(shape.h, 2)) / 2;
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, radius + 2, 0, 2 * Math.PI);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
+                });
+            }
+
+            const filterInputs = [brightnessInput, contrastInput, saturationInput, blurInput, sepiaInput];
+            filterInputs.forEach(input => {
+                input.addEventListener('input', applyFilters);
+                input.addEventListener('change', saveState); // Simpan state saat geser selesai
+            });
+
+            rotateLeftBtn.addEventListener('click', () => {
+                currentRotation = (currentRotation - 90 + 360) % 360;
+                applyFilters();
+                saveState();
+            });
+
+            rotateRightBtn.addEventListener('click', () => {
+                currentRotation = (currentRotation + 90) % 360;
+                applyFilters();
+                saveState();
+            });
+
+            flipHorizontalBtn.addEventListener('click', () => {
+                flipH = flipH === 1 ? -1 : 1;
+                applyFilters();
+                saveState();
+            });
+
+            flipVerticalBtn.addEventListener('click', () => {
+                flipV = flipV === 1 ? -1 : 1;
+                applyFilters();
+                saveState();
+            });
+
+            // Tool Selection
+            function setActiveTool(toolId, toolName) {
+                toolBtns.forEach(btn => btn.classList.remove('tool-active'));
+                document.getElementById(toolId).classList.add('tool-active');
+                currentTool = toolName;
+                
+                // Deselect shape when switching tools
+                selectedShapeIndex = -1;
+                if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+
+                // Reset crop box jika berganti alat
+                if (toolName !== 'crop') {
+                    cropBox = null;
+                    if (applyCropBtn) applyCropBtn.classList.add('hidden');
+                }
+                
+                applyFilters();
+                // Aktifkan/nonaktifkan slider lengkungan untuk alat kotak dan potong
+                const radiusContainer = document.getElementById('rect-radius-container');
+                if (radiusContainer) {
+                    const allowRadius = (toolName === 'rect' || toolName === 'crop');
+                    radiusContainer.classList.toggle('opacity-40', !allowRadius);
+                    shapeRadiusInput.disabled = !allowRadius;
+                }
+                
+                if (currentTool === 'none') {
+                    canvas.style.cursor = 'default';
+                } else {
+                    canvas.style.cursor = 'crosshair';
+                }
+            }
+
+            toolNoneBtn.addEventListener('click', () => setActiveTool('tool-none', 'none'));
+            toolRectBtn.addEventListener('click', () => setActiveTool('tool-rect', 'rect'));
+            toolCircleBtn.addEventListener('click', () => setActiveTool('tool-circle', 'circle'));
+            toolCropBtn.addEventListener('click', () => setActiveTool('tool-crop', 'crop'));
+            
+            shapeRadiusInput.addEventListener('input', (e) => {
+                radiusVal.textContent = `${e.target.value}px`;
+                if (selectedShapeIndex !== -1 && shapes[selectedShapeIndex].type === 'rect') {
+                    shapes[selectedShapeIndex].radius = parseInt(e.target.value);
+                    applyFilters();
+                } else if (currentTool === 'crop' && cropBox) {
+                    // Update overlay potongan secara real-time
+                    applyFilters();
+                }
+            });
+            shapeRadiusInput.addEventListener('change', saveState);
+
+            shapeColorInput.addEventListener('input', (e) => {
+                if (selectedShapeIndex !== -1) {
+                    shapes[selectedShapeIndex].color = e.target.value;
+                    applyFilters();
+                }
+            });
+            shapeColorInput.addEventListener('change', saveState);
+
+            shapeFillInput.addEventListener('change', (e) => {
+                if (selectedShapeIndex !== -1) {
+                    shapes[selectedShapeIndex].fill = e.target.checked;
+                    applyFilters();
+                    saveState();
+                }
+            });
+
+            clearShapesBtn.addEventListener('click', () => {
+                shapes = [];
+                selectedShapeIndex = -1;
+                if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+                applyFilters();
+                saveState();
+            });
+
+            layerUpBtn.addEventListener('click', () => {
+                if (selectedShapeIndex !== -1 && selectedShapeIndex < shapes.length - 1) {
+                    const temp = shapes[selectedShapeIndex];
+                    shapes[selectedShapeIndex] = shapes[selectedShapeIndex + 1];
+                    shapes[selectedShapeIndex + 1] = temp;
+                    selectedShapeIndex++;
+                    applyFilters();
+                    saveState();
+                }
+            });
+
+            layerDownBtn.addEventListener('click', () => {
+                if (selectedShapeIndex > 0) {
+                    const temp = shapes[selectedShapeIndex];
+                    shapes[selectedShapeIndex] = shapes[selectedShapeIndex - 1];
+                    shapes[selectedShapeIndex - 1] = temp;
+                    selectedShapeIndex--;
+                    applyFilters();
+                    saveState();
+                }
+            });
+
+            cutHoleBtn.addEventListener('click', () => {
+                if (selectedShapeIndex <= 0) {
+                    return; // Harus ada layer di belakangnya
+                }
+
+                const frontShape = shapes[selectedShapeIndex];
+                const frontBox = getBoundingBox(frontShape);
+                let bgShapeIndex = -1;
+
+                // Cari layer tepat di bawahnya yang lokasinya bertabrakan/tumpang tindih
+                for (let i = selectedShapeIndex - 1; i >= 0; i--) {
+                    const bgBox = getBoundingBox(shapes[i]);
+                    if (!(bgBox.x > frontBox.x + frontBox.w || 
+                          bgBox.x + bgBox.w < frontBox.x || 
+                          bgBox.y > frontBox.y + frontBox.h || 
+                          bgBox.y + bgBox.h < frontBox.y)) {
+                        bgShapeIndex = i;
+                        break;
+                    }
+                }
+
+                if (bgShapeIndex !== -1) {
+                    const bgShape = shapes[bgShapeIndex];
+                    if (!bgShape.holes) bgShape.holes = [];
+                    
+                    // Masukkan bentuk depan sebagai daftar lubang pada bentuk di belakang
+                    bgShape.holes.push(JSON.parse(JSON.stringify(frontShape)));
+                    
+                    // Hapus bentuk di depan karena sudah menyatu
+                    shapes.splice(selectedShapeIndex, 1);
+                    
+                    // Pindahkan fokus seleksi ke objek yang baru saja dilubangi
+                    selectedShapeIndex = bgShapeIndex;
+                    applyFilters();
+                    saveState();
+                }
+            });
+            
+            cropWithShapeBtn.addEventListener('click', () => {
+                if (selectedShapeIndex === -1) return;
+                
+                const selectedShape = shapes[selectedShapeIndex];
+                
+                // 1. Sembunyikan semua shape sementara untuk mendapatkan gambar dengan filternya saja
+                const savedShapes = shapes;
+                shapes = []; 
+                applyFilters(); // Render ulang canvas TANPA bentuk shape di atasnya
+                
+                // 2. Siapkan canvas sementara sebesar KANVAS UTAMA
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tCtx = tempCanvas.getContext('2d');
+                
+                // 3. Salin gambar dari kanvas utama yang terfilter
+                tCtx.drawImage(canvas, 0, 0);
+                
+                // 4. Ubah mode composite untuk MENGHAPUS (menjadikan transparan) area dari bentuk yang dipilih
+                tCtx.globalCompositeOperation = 'destination-out';
+                
+                // 5. Gambar bentuk di atas kanvas sementara
+                // Objek yang digambar ini otomatis akan "melubangi" gambar di belakangnya (menjadi PNG transparan)
+                const path = buildPathForShape(selectedShape);
+                tCtx.fillStyle = 'black'; 
+                tCtx.fill(path, 'evenodd');
+                
+                // 6. Jadikan hasil tersebut sebagai gambar baru di aplikasi
+                const newImg = new Image();
+                newImg.onload = () => {
+                    originalImage = newImg;
+                    
+                    // Reset semua alat dan bentuk karena sudah melebur menjadi gambar
+                    currentRotation = 0;
+                    flipH = 1;
+                    flipV = 1;
+                    shapes = []; 
+                    selectedShapeIndex = -1;
+                    cropWithShapeBtn.classList.add('hidden');
+                    
+                    brightnessInput.value = 100;
+                    contrastInput.value = 100;
+                    saturationInput.value = 100;
+                    blurInput.value = 0;
+                    sepiaInput.value = 0;
+                    
+                    setActiveTool('tool-none', 'none');
+                    applyFilters();
+                    saveState();
+                };
+                newImg.src = tempCanvas.toDataURL('image/png');
+            });
+            
+            // Delete key functionality for selected shape
+            document.addEventListener('keydown', (e) => {
+                if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndex !== -1) {
+                    shapes.splice(selectedShapeIndex, 1);
+                    selectedShapeIndex = -1;
+                    if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+                    applyFilters();
+                    saveState();
+                }
+            });
+
+            applyCropBtn.addEventListener('click', () => {
+                if (!cropBox) return;
+                const r = getNormalRect(cropBox);
+                
+                // Buat canvas sementara untuk mengekstrak hanya gambar yang dipotong
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = r.w;
+                tempCanvas.height = r.h;
+                const tCtx = tempCanvas.getContext('2d');
+                
+                const radius = Math.min(parseInt(shapeRadiusInput.value) || 0, r.w/2, r.h/2);
+                
+                // Aplikasikan clipping path untuk melengkungkan sudut (menjadi transparan di luarnya)
+                tCtx.beginPath();
+                if (tCtx.roundRect) {
+                    tCtx.roundRect(0, 0, r.w, r.h, radius);
+                } else {
+                    tCtx.rect(0, 0, r.w, r.h);
+                }
+                tCtx.clip();
+
+                // Sembunyikan overlay potong sebentar agar tidak ikut tersimpan
+                const tempCrop = cropBox;
+                cropBox = null;
+                applyFilters(); 
+                
+                // Salin isi canvas utama (termasuk filter & bentuk) ke area potongan
+                tCtx.drawImage(canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+                
+                // Jadikan hasil potong sebagai gambar baru
+                const newImg = new Image();
+                newImg.onload = () => {
+                    originalImage = newImg;
+                    
+                    // Reset semua transformasi & bentuk karena sekarang sudah menyatu (baked) pada gambar
+                    currentRotation = 0;
+                    flipH = 1;
+                    flipV = 1;
+                    shapes = [];
+                    selectedShapeIndex = -1;
+                    
+                    // Kembalikan slider filter ke default agar tidak menumpuk/double-filter
+                    brightnessInput.value = 100;
+                    contrastInput.value = 100;
+                    saturationInput.value = 100;
+                    blurInput.value = 0;
+                    sepiaInput.value = 0;
+                    
+                    setActiveTool('tool-none', 'none');
+                    applyFilters();
+                    saveState();
+                };
+                newImg.src = tempCanvas.toDataURL('image/png');
+            });
+
+            // Drawing Logic
+            function getMousePos(canvas, evt) {
+                const rect = canvas.getBoundingClientRect();
+                // Calculate scale to account for responsive canvas sizing
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
+                let clientX = evt.clientX;
+                let clientY = evt.clientY;
+                
+                // Ekstrak koordinat dari event sentuhan (touch) di Android/Mobile
+                if (evt.touches && evt.touches.length > 0) {
+                    clientX = evt.touches[0].clientX;
+                    clientY = evt.touches[0].clientY;
+                } else if (evt.changedTouches && evt.changedTouches.length > 0) {
+                    clientX = evt.changedTouches[0].clientX;
+                    clientY = evt.changedTouches[0].clientY;
+                }
+                
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            }
+
+            // Helper function to translate shape and its holes
+            function translateShape(shape, dx, dy) {
+                shape.x += dx;
+                shape.y += dy;
+                if (shape.holes) {
+                    shape.holes.forEach(hole => translateShape(hole, dx, dy));
+                }
+            }
+
+            // Helper function to scale holes when resizing
+            function scaleHoles(holes, origHoles, newX, newY, origX, origY, scaleX, scaleY) {
+                for (let i = 0; i < holes.length; i++) {
+                    holes[i].w = origHoles[i].w * scaleX;
+                    holes[i].h = origHoles[i].h * scaleY;
+                    const relX = origHoles[i].x - origX;
+                    const relY = origHoles[i].y - origY;
+                    holes[i].x = newX + (relX * scaleX);
+                    holes[i].y = newY + (relY * scaleY);
+                    
+                    if (holes[i].holes) {
+                        scaleHoles(holes[i].holes, origHoles[i].holes, newX, newY, origX, origY, scaleX, scaleY);
+                    }
+                }
+            }
+
+            const interactionStart = (e) => {
+                if (e.type.startsWith('touch') && e.cancelable) e.preventDefault();
+                if (!originalImage) return;
+                const pos = getMousePos(canvas, e);
+                
+                if (currentTool === 'crop') {
+                    if (cropBox) {
+                        const normCrop = getNormalRect(cropBox);
+                        const handle = getHandleAtPos(pos.x, pos.y, {type: 'rect', ...normCrop});
+                        if (handle) {
+                            isResizingCrop = true;
+                            cropResizeHandle = handle.type;
+                            originalCropState = { ...normCrop, startX: pos.x, startY: pos.y };
+                            return;
+                        }
+                        
+                        if (pos.x >= normCrop.x && pos.x <= normCrop.x + normCrop.w && 
+                            pos.y >= normCrop.y && pos.y <= normCrop.y + normCrop.h) {
+                            isDraggingCrop = true;
+                            dragOffsetX = pos.x;
+                            dragOffsetY = pos.y;
+                            return;
+                        }
+                    }
+
+                    isDrawing = true;
+                    startX = pos.x;
+                    startY = pos.y;
+                    cropBox = { x: startX, y: startY, w: 0, h: 0 };
+                    applyCropBtn.classList.add('hidden');
+                    return;
+                }
+
+                if (currentTool === 'none') {
+                    // Check for resize handle
+                    if (selectedShapeIndex !== -1) {
+                        const handle = getHandleAtPos(pos.x, pos.y, shapes[selectedShapeIndex]);
+                        if (handle) {
+                            isResizingShape = true;
+                            resizeHandleType = handle.type;
+                            originalShapeState = JSON.parse(JSON.stringify(shapes[selectedShapeIndex]));
+                            originalShapeState.startX = pos.x;
+                            originalShapeState.startY = pos.y;
+                            return;
+                        }
+                    }
+
+                    // Check for shape click (selection & dragging)
+                    for (let i = shapes.length - 1; i >= 0; i--) {
+                        if (isPointInShape(pos.x, pos.y, shapes[i])) {
+                            selectedShapeIndex = i;
+                            isDraggingShape = true;
+                            dragOffsetX = pos.x;
+                            dragOffsetY = pos.y;
+                            
+                            // Update UI settings to match selected shape
+                            const sel = shapes[i];
+                            shapeColorInput.value = sel.color || '#ff0000';
+                            shapeFillInput.checked = !!sel.fill;
+                            if (sel.type === 'rect') {
+                                document.getElementById('rect-radius-container').classList.remove('opacity-40');
+                                shapeRadiusInput.disabled = false;
+                                shapeRadiusInput.value = sel.radius || 0;
+                                radiusVal.textContent = `${sel.radius || 0}px`;
+                            } else {
+                                document.getElementById('rect-radius-container').classList.add('opacity-40');
+                                shapeRadiusInput.disabled = true;
+                            }
+                            
+                            if (cropWithShapeBtn) cropWithShapeBtn.classList.remove('hidden');
+                            
+                            applyFilters();
+                            return;
+                        }
+                    }
+
+                    selectedShapeIndex = -1;
+                    if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+                    applyFilters();
+                    return;
+                }
+
+                isDrawing = true;
+                startX = pos.x;
+                startY = pos.y;
+            };
+
+            const interactionMove = (e) => {
+                if (e.type.startsWith('touch') && e.cancelable) e.preventDefault();
+                if (!originalImage) return;
+                const pos = getMousePos(canvas, e);
+                
+                if (currentTool === 'crop') {
+                    if (isResizingCrop) {
+                        const orig = originalCropState;
+                        const dx = pos.x - orig.startX;
+                        const dy = pos.y - orig.startY;
+
+                        let newX = orig.x, newY = orig.y, newW = orig.w, newH = orig.h;
+
+                        if (cropResizeHandle.includes('r')) newW = orig.w + dx;
+                        if (cropResizeHandle.includes('l')) { newX = orig.x + dx; newW = orig.w - dx; }
+                        if (cropResizeHandle.includes('b')) newH = orig.h + dy;
+                        if (cropResizeHandle.includes('t')) { newY = orig.y + dy; newH = orig.h - dy; }
+
+                        // Batas ukuran minimum crop
+                        if (newW < 10) { newW = 10; if (cropResizeHandle.includes('l')) newX = orig.x + orig.w - 10; }
+                        if (newH < 10) { newH = 10; if (cropResizeHandle.includes('t')) newY = orig.y + orig.h - 10; }
+
+                        cropBox = { x: newX, y: newY, w: newW, h: newH };
+                        applyFilters();
+                        return;
+                    } else if (isDraggingCrop) {
+                        const dx = pos.x - dragOffsetX;
+                        const dy = pos.y - dragOffsetY;
+                        
+                        cropBox.x += dx;
+                        cropBox.y += dy;
+                        
+                        dragOffsetX = pos.x;
+                        dragOffsetY = pos.y;
+                        applyFilters();
+                        return;
+                    } else if (isDrawing) {
+                        cropBox.w = pos.x - startX;
+                        cropBox.h = pos.y - startY;
+                        applyFilters();
+                        return;
+                    } else {
+                        // Perubahan kursor saat hover area potong
+                        if (cropBox) {
+                            const normCrop = getNormalRect(cropBox);
+                            const handle = getHandleAtPos(pos.x, pos.y, {type: 'rect', ...normCrop});
+                            if (handle) {
+                                canvas.style.cursor = handle.cursor;
+                                return;
+                            }
+                            if (pos.x >= normCrop.x && pos.x <= normCrop.x + normCrop.w && 
+                                pos.y >= normCrop.y && pos.y <= normCrop.y + normCrop.h) {
+                                canvas.style.cursor = 'move';
+                                return;
+                            }
+                        }
+                        canvas.style.cursor = 'crosshair';
+                        return;
+                    }
+                }
+
+                if (currentTool === 'none') {
+                    if (isResizingShape && selectedShapeIndex !== -1) {
+                        const shape = shapes[selectedShapeIndex];
+                        const orig = originalShapeState;
+                        const dx = pos.x - orig.startX;
+                        const dy = pos.y - orig.startY;
+
+                        let newX = orig.x, newY = orig.y, newW = orig.w, newH = orig.h;
+
+                        if (resizeHandleType.includes('r')) newW = orig.w + dx;
+                        if (resizeHandleType.includes('l')) { newX = orig.x + dx; newW = orig.w - dx; }
+                        if (resizeHandleType.includes('b')) newH = orig.h + dy;
+                        if (resizeHandleType.includes('t')) { newY = orig.y + dy; newH = orig.h - dy; }
+
+                        // Prevent getting too small or inverted during drag for visual stability
+                        if (newW < 5) { newW = 5; if (resizeHandleType.includes('l')) newX = orig.x + orig.w - 5; }
+                        if (newH < 5) { newH = 5; if (resizeHandleType.includes('t')) newY = orig.y + orig.h - 5; }
+
+                        const scaleX = newW / orig.w;
+                        const scaleY = newH / orig.h;
+
+                        shape.x = newX;
+                        shape.y = newY;
+                        shape.w = newW;
+                        shape.h = newH;
+
+                        if (shape.holes && orig.holes) {
+                            scaleHoles(shape.holes, orig.holes, newX, newY, orig.x, orig.y, scaleX, scaleY);
+                        }
+                        applyFilters();
+                    } else if (isDraggingShape && selectedShapeIndex !== -1) {
+                        const dx = pos.x - dragOffsetX;
+                        const dy = pos.y - dragOffsetY;
+                        
+                        translateShape(shapes[selectedShapeIndex], dx, dy);
+                        
+                        dragOffsetX = pos.x;
+                        dragOffsetY = pos.y;
+                        
+                        applyFilters();
+                    } else {
+                        // Hover effects
+                        let cursorStyle = 'default';
+                        let hovered = false;
+                        
+                        if (selectedShapeIndex !== -1) {
+                            const handle = getHandleAtPos(pos.x, pos.y, shapes[selectedShapeIndex]);
+                            if (handle) {
+                                cursorStyle = handle.cursor;
+                                hovered = true;
+                            }
+                        }
+
+                        if (!hovered) {
+                            for (let i = shapes.length - 1; i >= 0; i--) {
+                                if (isPointInShape(pos.x, pos.y, shapes[i])) {
+                                    cursorStyle = 'move';
+                                    break;
+                                }
+                            }
+                        }
+                        canvas.style.cursor = cursorStyle;
+                    }
+                    return;
+                }
+                
+                if (!isDrawing) return;
+                
+                applyFilters(); 
+                
+                const currentX = pos.x;
+                const currentY = pos.y;
+                const width = currentX - startX;
+                const height = currentY - startY;
+
+                ctx.beginPath();
+                const color = shapeColorInput.value;
+                const fill = shapeFillInput.checked;
+                
+                if (fill) {
+                    ctx.fillStyle = color;
+                } else {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                }
+
+                if (currentTool === 'rect') {
+                    const rectX = width < 0 ? startX + width : startX;
+                    const rectY = height < 0 ? startY + height : startY;
+                    const rectW = Math.abs(width);
+                    const rectH = Math.abs(height);
+                    
+                    const radius = parseInt(shapeRadiusInput.value);
+                    const maxRadius = Math.min(rectW / 2, rectH / 2);
+                    const currentRadius = Math.min(radius, maxRadius);
+
+                    if (ctx.roundRect) {
+                        ctx.roundRect(rectX, rectY, rectW, rectH, currentRadius);
+                        if (fill) ctx.fill();
+                        else ctx.stroke();
+                    } else {
+                        if (fill) {
+                            ctx.fillRect(startX, startY, width, height);
+                        } else {
+                            ctx.strokeRect(startX, startY, width, height);
+                        }
+                    }
+                } else if (currentTool === 'circle') {
+                    const radius = Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2)) / 2;
+                    const centerX = startX + width / 2;
+                    const centerY = startY + height / 2;
+                    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                    if (fill) ctx.fill();
+                    else ctx.stroke();
+                }
+            };
+
+            const interactionEnd = (e) => {
+                if (e.type.startsWith('touch') && e.cancelable) e.preventDefault();
+                if (!originalImage) return;
+                
+                if (currentTool === 'crop') {
+                    if (isResizingCrop || isDraggingCrop) {
+                        isResizingCrop = false;
+                        isDraggingCrop = false;
+                        cropBox = getNormalRect(cropBox); // Normalkan setelah resize/drag
+                        applyFilters();
+                        return;
+                    }
+                    if (isDrawing) {
+                        isDrawing = false;
+                        const r = getNormalRect(cropBox);
+                        if (r.w > 10 && r.h > 10) {
+                            cropBox = r;
+                            applyCropBtn.classList.remove('hidden');
+                        } else {
+                            cropBox = null;
+                            applyCropBtn.classList.add('hidden');
+                        }
+                        applyFilters();
+                    }
+                    return;
+                }
+
+                if (currentTool === 'none') {
+                    let changed = isDraggingShape || isResizingShape;
+                    isDraggingShape = false;
+                    if (isResizingShape) {
+                        isResizingShape = false;
+                        if (selectedShapeIndex !== -1) {
+                            normalizeShape(shapes[selectedShapeIndex]);
+                        }
+                    }
+                    if (changed) saveState();
+                    return;
+                }
+                
+                if (isDrawing) {
+                    isDrawing = false;
+                    const pos = getMousePos(canvas, e);
+                    const width = pos.x - startX;
+                    const height = pos.y - startY;
+
+                    // Only save if the shape has a decent size
+                    if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+                        const newShape = {
+                            type: currentTool,
+                            x: startX,
+                            y: startY,
+                            w: width,
+                            h: height,
+                            color: shapeColorInput.value,
+                            fill: shapeFillInput.checked
+                        };
+                        
+                        if (currentTool === 'rect') {
+                            newShape.radius = parseInt(shapeRadiusInput.value);
+                            normalizeShape(newShape);
+                        }
+                        
+                        shapes.push(newShape);
+                        selectedShapeIndex = shapes.length - 1; // Auto select new shape
+                        if (cropWithShapeBtn) cropWithShapeBtn.classList.remove('hidden');
+                    }
+                    applyFilters();
+                    saveState();
+                }
+            };
+
+            // Pasang event pendengar untuk interaksi Mouse (Desktop)
+            canvas.addEventListener('mousedown', interactionStart);
+            canvas.addEventListener('mousemove', interactionMove);
+            canvas.addEventListener('mouseup', interactionEnd);
+            canvas.addEventListener('mouseleave', interactionEnd);
+
+            // Pasang event pendengar untuk interaksi Touch (Android/Mobile)
+            canvas.addEventListener('touchstart', interactionStart, { passive: false });
+            canvas.addEventListener('touchmove', interactionMove, { passive: false });
+            canvas.addEventListener('touchend', interactionEnd, { passive: false });
+            canvas.addEventListener('touchcancel', interactionEnd, { passive: false });
+
+            function resetSettings() {
+                brightnessInput.value = 100;
+                contrastInput.value = 100;
+                saturationInput.value = 100;
+                blurInput.value = 0;
+                sepiaInput.value = 0;
+                currentRotation = 0;
+                flipH = 1;
+                flipV = 1;
+                shapes = []; // Also reset shapes
+                selectedShapeIndex = -1;
+                isResizingShape = false;
+                isDraggingShape = false;
+                isResizingCrop = false;
+                isDraggingCrop = false;
+                if (cropWithShapeBtn) cropWithShapeBtn.classList.add('hidden');
+                
+                if (originalImage) {
+                    applyFilters();
+                }
+            }
+            
+            resetBtn.addEventListener('click', () => {
+                resetSettings();
+                saveState();
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                if (!originalImage) return;
+                
+                // Deselect shape temporarily so the blue outline is not downloaded
+                const wasSelected = selectedShapeIndex;
+                selectedShapeIndex = -1;
+                applyFilters();
+                
+                // Get data URL from canvas
+                const link = document.createElement('a');
+                link.download = 'edited_image.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                
+                // Restore selection visually after download
+                if (wasSelected !== -1) {
+                    selectedShapeIndex = wasSelected;
+                    applyFilters();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
